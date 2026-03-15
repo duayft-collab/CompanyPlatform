@@ -560,6 +560,309 @@ a{text-decoration:none;color:inherit}
 .inv-link:hover{background:var(--ac);color:#fff;border-color:var(--ac)}
 .inv-updated{font-size:8px;font-family:var(--mono);color:var(--tx3);margin-left:auto}
 </style>
+
+<!-- Firebase SDK -->
+<script type="module" id="fb-module">
+/* ═══════════════════════════════════════════════
+   FIREBASE CONFIGURATION
+   Project: stratejikkarardestek
+   Security: Firebase Authentication + Firestore Rules
+═══════════════════════════════════════════════ */
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js';
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from 'https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js';
+import { getFirestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc, serverTimestamp, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js';
+
+const FB_CFG = {
+  apiKey: "AIzaSyDOfwK0SQZ4EOLRKPRg5QkJW4DLMSXawUw",
+  authDomain: "stratejikkarardestek.firebaseapp.com",
+  projectId: "stratejikkarardestek",
+  storageBucket: "stratejikkarardestek.firebasestorage.app",
+  messagingSenderId: "329117849620",
+  appId: "1:329117849620:web:f3a39d628838d20e002f01"
+};
+
+const fbApp = initializeApp(FB_CFG);
+const auth = getAuth(fbApp);
+const db = getFirestore(fbApp);
+
+/* ═══ FIRESTORE DATA SYNC ═══ */
+// Collections structure:
+// users/{uid}/profile       → { role, displayName, email }
+// users/{uid}/portfolio     → { gold:[], crypto:[], other:[] }
+// users/{uid}/notes         → subcollection
+// users/{uid}/events        → subcollection
+// users/{uid}/todos         → subcollection
+// users/{uid}/links         → { biz:[], fin:[], other:[] }
+// users/{uid}/realestate    → []
+// users/{uid}/pipeline      → []
+// users/{uid}/books         → []
+// users/{uid}/goals         → []
+// users/{uid}/kids          → []
+// users/{uid}/suggestions   → subcollection (admin görebilir)
+// admin_data/suggestions    → tüm kullanıcıların önerileri
+
+window._FB = { auth, db, uid: null, role: 'user', saving: false };
+
+/* ═══ SAVE HELPERS ═══ */
+async function fbSave(path, data) {
+  if (!window._FB.uid) return;
+  try {
+    await setDoc(doc(db, 'users', window._FB.uid, path, 'data'), { ...data, updatedAt: serverTimestamp() });
+    showSaveIndicator('saved');
+  } catch(e) {
+    console.error('FB Save error:', e);
+    showSaveIndicator('error');
+  }
+}
+async function fbSaveCollection(colPath, items) {
+  if (!window._FB.uid) return;
+  try {
+    await setDoc(doc(db, 'users', window._FB.uid, colPath, 'list'), { items, updatedAt: serverTimestamp() });
+    showSaveIndicator('saved');
+  } catch(e) {
+    console.error('FB Save error:', e);
+  }
+}
+async function fbLoad(path) {
+  if (!window._FB.uid) return null;
+  try {
+    const snap = await getDoc(doc(db, 'users', window._FB.uid, path, 'data'));
+    return snap.exists() ? snap.data() : null;
+  } catch(e) { return null; }
+}
+async function fbLoadCollection(colPath) {
+  if (!window._FB.uid) return null;
+  try {
+    const snap = await getDoc(doc(db, 'users', window._FB.uid, colPath, 'list'));
+    return snap.exists() ? snap.data().items : null;
+  } catch(e) { return null; }
+}
+
+function showSaveIndicator(state) {
+  var el = document.getElementById('save-indicator');
+  if (!el) return;
+  el.textContent = state === 'saved' ? '✓ Kaydedildi' : '⚠ Kayıt hatası';
+  el.style.color = state === 'saved' ? 'var(--gr)' : 'var(--rd)';
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.opacity = '0'; }, 2500);
+}
+
+/* ═══ LOAD ALL USER DATA ═══ */
+async function loadUserData() {
+  showFBStatus('Veriler yükleniyor...');
+  
+  // Portfolio
+  const pf = await fbLoad('portfolio');
+  if (pf) { D.pf.gold = pf.gold||[]; D.pf.crypto = pf.crypto||[]; D.pf.other = pf.other||[]; }
+  
+  // Notes
+  const notes = await fbLoadCollection('notes');
+  if (notes) D.notes = notes;
+  
+  // Events
+  const events = await fbLoadCollection('events');
+  if (events) D.events = events;
+  
+  // Todos
+  const todos = await fbLoadCollection('todos');
+  if (todos) D.todos = todos;
+  
+  // Links
+  const links = await fbLoad('links');
+  if (links) { D.links.biz = links.biz||[]; D.links.fin = links.fin||[]; D.links.other = links.other||[]; }
+  
+  // Real estate
+  const re = await fbLoadCollection('realestate');
+  if (re) D.re = re;
+  
+  // Pipeline
+  const pipe = await fbLoadCollection('pipeline');
+  if (pipe) D.pipe = pipe;
+  
+  // Books
+  const books = await fbLoadCollection('books');
+  if (books) D.books = books;
+  
+  // Goals
+  const goals = await fbLoadCollection('goals');
+  if (goals) D.goals = goals;
+  
+  // Kids
+  const kids = await fbLoadCollection('kids');
+  if (kids) D.kids = kids;
+  
+  // Suggestions (admin sees all)
+  if (window._FB.role === 'admin') {
+    try {
+      const adminSnap = await getDoc(doc(db, 'admin_data', 'suggestions'));
+      if (adminSnap.exists()) D.suggestions = adminSnap.data().items || [];
+    } catch(e) {}
+  } else {
+    const sugg = await fbLoadCollection('suggestions');
+    if (sugg) D.suggestions = sugg;
+  }
+  
+  showFBStatus('');
+  
+  // Re-render all
+  if (typeof renderPortfolio === 'function') renderPortfolio();
+  if (typeof renderNotes === 'function') renderNotes();
+  if (typeof renderTodos === 'function') renderTodos();
+  if (typeof renderLinks === 'function') renderLinks();
+  if (typeof rRE === 'function') rRE();
+  if (typeof rPipe === 'function') rPipe();
+  if (typeof rBooks === 'function') rBooks();
+  if (typeof rGoals === 'function') rGoals();
+  if (typeof rKids === 'function') rKids();
+  if (typeof renderCal === 'function') renderCal();
+  if (typeof renderSuggestions === 'function') renderSuggestions();
+  if (typeof renderPins === 'function') renderPins();
+}
+
+function showFBStatus(msg) {
+  var el = document.getElementById('fb-status');
+  if (el) { el.textContent = msg; el.style.display = msg ? 'block' : 'none'; }
+}
+
+/* ═══ SAVE WRAPPERS — called after every mutation ═══ */
+window.fbSavePf = () => fbSave('portfolio', { gold: D.pf.gold, crypto: D.pf.crypto, other: D.pf.other });
+window.fbSaveNotes = () => fbSaveCollection('notes', D.notes);
+window.fbSaveEvents = () => fbSaveCollection('events', D.events);
+window.fbSaveTodos = () => fbSaveCollection('todos', D.todos);
+window.fbSaveLinks = () => fbSave('links', { biz: D.links.biz, fin: D.links.fin, other: D.links.other });
+window.fbSaveRE = () => fbSaveCollection('realestate', D.re);
+window.fbSavePipe = () => fbSaveCollection('pipeline', D.pipe);
+window.fbSaveBooks = () => fbSaveCollection('books', D.books);
+window.fbSaveGoals = () => fbSaveCollection('goals', D.goals);
+window.fbSaveKids = () => fbSaveCollection('kids', D.kids);
+window.fbSaveSugg = async () => {
+  if (window._FB.role === 'admin') {
+    try { await setDoc(doc(db, 'admin_data', 'suggestions'), { items: D.suggestions, updatedAt: serverTimestamp() }); }
+    catch(e) {}
+  }
+  fbSaveCollection('suggestions', D.suggestions);
+};
+
+/* ═══ AUTH STATE LISTENER ═══ */
+onAuthStateChanged(auth, async (user) => {
+  if (user) {
+    window._FB.uid = user.uid;
+    
+    // Get user role from Firestore
+    try {
+      const profileSnap = await getDoc(doc(db, 'users', user.uid, 'profile', 'data'));
+      if (profileSnap.exists()) {
+        window._FB.role = profileSnap.data().role || 'user';
+      } else {
+        // First login — create profile
+        const isFirstUser = user.email && user.email.includes('admin');
+        window._FB.role = isFirstUser ? 'admin' : 'user';
+        await setDoc(doc(db, 'users', user.uid, 'profile', 'data'), {
+          email: user.email,
+          displayName: user.displayName || user.email.split('@')[0],
+          role: window._FB.role,
+          createdAt: serverTimestamp()
+        });
+      }
+    } catch(e) { window._FB.role = 'user'; }
+    
+    // Hide login, show app
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-shell').style.display = 'flex';
+    document.getElementById('app-shell').style.flexDirection = 'column';
+    
+    // Update UI
+    var displayName = user.displayName || user.email.split('@')[0];
+    var roleLabel = window._FB.role === 'admin' ? 'Admin' : 'Kullanıcı';
+    document.getElementById('u-name').textContent = displayName + ' (' + roleLabel + ')';
+    var av = document.getElementById('u-av');
+    if (av) { av.textContent = displayName[0].toUpperCase(); av.style.background = window._FB.role === 'admin' ? '#3B6EF8' : '#10B981'; }
+    
+    // Update version bar
+    if (typeof updateVerBar === 'function') updateVerBar();
+    
+    // Load data from Firestore then init app
+    await loadUserData();
+    if (typeof initApp === 'function') initApp();
+    
+  } else {
+    // Not logged in — show login
+    window._FB.uid = null;
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('app-shell').style.display = 'none';
+  }
+});
+
+/* ═══ FIREBASE AUTH FUNCTIONS ═══ */
+window.doLogin = async function() {
+  var email = document.getElementById('l-user').value.trim();
+  var pass = document.getElementById('l-pass').value;
+  var errEl = document.getElementById('l-err');
+  var btn = document.getElementById('lbl-login-btn');
+  
+  if (!email || !pass) { errEl.textContent = 'E-posta ve şifre gerekli.'; return; }
+  // If no @ sign, treat as username → auto add domain
+  if (!email.includes('@')) email = email + '@stratejik.app';
+  
+  btn.textContent = 'Giriş yapılıyor...';
+  btn.disabled = true;
+  errEl.textContent = '';
+  
+  try {
+    await signInWithEmailAndPassword(auth, email, pass);
+    // onAuthStateChanged handles the rest
+  } catch(e) {
+    var msgs = {
+      'auth/user-not-found': 'Kullanıcı bulunamadı.',
+      'auth/wrong-password': 'Yanlış şifre.',
+      'auth/invalid-credential': 'Hatalı e-posta veya şifre.',
+      'auth/too-many-requests': 'Çok fazla deneme. Lütfen bekleyin.',
+      'auth/network-request-failed': 'İnternet bağlantısı hatası.'
+    };
+    errEl.textContent = msgs[e.code] || 'Giriş başarısız: ' + e.message;
+    btn.textContent = 'Giriş Yap';
+    btn.disabled = false;
+  }
+};
+
+window.doRegister = async function() {
+  var email = document.getElementById('reg-email').value.trim();
+  var pass = document.getElementById('reg-pass').value;
+  var name = document.getElementById('reg-name').value.trim();
+  var errEl = document.getElementById('reg-err');
+  
+  if (!email || !pass || !name) { errEl.textContent = 'Tüm alanları doldurun.'; return; }
+  if (pass.length < 6) { errEl.textContent = 'Şifre en az 6 karakter olmalı.'; return; }
+  if (!email.includes('@')) email = email + '@stratejik.app';
+  
+  errEl.textContent = '';
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email, pass);
+    await updateProfile(cred.user, { displayName: name });
+    // onAuthStateChanged handles the rest
+  } catch(e) {
+    var msgs = {
+      'auth/email-already-in-use': 'Bu e-posta zaten kayıtlı.',
+      'auth/weak-password': 'Şifre çok zayıf.',
+      'auth/invalid-email': 'Geçersiz e-posta adresi.'
+    };
+    errEl.textContent = msgs[e.code] || 'Kayıt başarısız: ' + e.message;
+  }
+};
+
+window.doLogout = async function() {
+  try { await signOut(auth); } catch(e) {}
+};
+
+window.toggleAuthTab = function(tab) {
+  document.getElementById('login-tab').style.display = tab === 'login' ? 'block' : 'none';
+  document.getElementById('register-tab').style.display = tab === 'register' ? 'block' : 'none';
+  document.querySelectorAll('.auth-tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector('[data-auth="'+tab+'"]').classList.add('active');
+};
+
+</script>
 </head>
 <body>
 
@@ -570,13 +873,64 @@ a{text-decoration:none;color:inherit}
       <div class="login-icon">S</div>
       <div><h1>Strategy Hub</h1><small>Karar Destek Platformu</small></div>
     </div>
-    <div class="lf-group"><label class="lf-label" id="lbl-user">Kullanıcı Adı</label><input class="lf-input" id="l-user" type="text" placeholder="admin" autocomplete="username"></div>
-    <div class="lf-group"><label class="lf-label" id="lbl-pass">Şifre</label><input class="lf-input" id="l-pass" type="password" placeholder="••••••••" autocomplete="current-password"></div>
-    <div id="l-err" class="login-err"></div>
-    <button class="login-btn" id="lbl-login-btn" onclick="doLogin()">Giriş Yap</button>
-    <div class="login-langs"><button class="lang-btn active" onclick="setLang('tr')">🇹🇷 TR</button><button class="lang-btn" onclick="setLang('en')">🇬🇧 EN</button><button class="lang-btn" onclick="setLang('fr')">🇫🇷 FR</button></div>
+    <!-- AUTH TABS -->
+    <div style="display:flex;gap:0;margin-bottom:20px;background:var(--bg3);border-radius:10px;padding:3px">
+      <button class="auth-tab-btn active" data-auth="login" onclick="toggleAuthTab('login')" style="flex:1;padding:7px;border-radius:8px;font-size:11px;font-weight:700;background:var(--bg2);color:var(--tx);box-shadow:var(--sh);transition:all .15s">Giriş Yap</button>
+      <button class="auth-tab-btn" data-auth="register" onclick="toggleAuthTab('register')" style="flex:1;padding:7px;border-radius:8px;font-size:11px;font-weight:700;color:var(--tx3);transition:all .15s">Yeni Hesap</button>
+    </div>
+    <!-- LOGIN TAB -->
+    <div id="login-tab">
+      <div class="lf-group">
+        <label class="lf-label" id="lbl-user">E-posta veya Kullanıcı Adı</label>
+        <input class="lf-input" id="l-user" type="text" placeholder="ornek@email.com" autocomplete="username">
+        <div style="font-size:9px;color:var(--tx3);margin-top:4px">@ işareti yoksa @stratejik.app eklenir</div>
+      </div>
+      <div class="lf-group">
+        <label class="lf-label" id="lbl-pass">Şifre</label>
+        <div style="position:relative">
+          <input class="lf-input" id="l-pass" type="password" placeholder="••••••••" autocomplete="current-password" style="padding-right:40px">
+          <button onclick="togglePw('l-pass')" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--tx3)">👁</button>
+        </div>
+      </div>
+      <div id="l-err" class="login-err"></div>
+      <button class="login-btn" id="lbl-login-btn" onclick="doLogin()">Giriş Yap</button>
+    </div>
+    <!-- REGISTER TAB -->
+    <div id="register-tab" style="display:none">
+      <div class="lf-group">
+        <label class="lf-label">Ad Soyad</label>
+        <input class="lf-input" id="reg-name" type="text" placeholder="Ad Soyad" autocomplete="name">
+      </div>
+      <div class="lf-group">
+        <label class="lf-label">E-posta</label>
+        <input class="lf-input" id="reg-email" type="email" placeholder="ornek@email.com" autocomplete="email">
+      </div>
+      <div class="lf-group">
+        <label class="lf-label">Şifre (min 6 karakter)</label>
+        <div style="position:relative">
+          <input class="lf-input" id="reg-pass" type="password" placeholder="••••••••" autocomplete="new-password" style="padding-right:40px">
+          <button onclick="togglePw('reg-pass')" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--tx3)">👁</button>
+        </div>
+      </div>
+      <div id="reg-err" class="login-err"></div>
+      <button class="login-btn" onclick="doRegister()">Hesap Oluştur</button>
+      <div style="font-size:10px;color:var(--tx3);text-align:center;margin-top:8px">Kaydolduktan sonra admin tarafından rol ataması yapılır.</div>
+    </div>
+    <!-- LANG & VERSION -->
+    <div class="login-langs" style="margin-top:16px">
+      <button class="lang-btn active" onclick="setLang('tr')">🇹🇷 TR</button>
+      <button class="lang-btn" onclick="setLang('en')">🇬🇧 EN</button>
+      <button class="lang-btn" onclick="setLang('fr')">🇫🇷 FR</button>
+    </div>
+    <!-- Firebase Status -->
+    <div id="fb-status" style="display:none;font-size:10px;color:var(--ac);text-align:center;margin-top:8px;font-family:var(--mono)"></div>
     <div class="login-version" id="l-ver"></div>
-    <div class="login-users-hint"><strong>Demo hesaplar:</strong><br>admin / admin123 &nbsp;·&nbsp; user1 / user1pass &nbsp;·&nbsp; guest / guest</div>
+    <div class="login-users-hint" style="margin-top:10px">
+      <strong>🔒 Firebase Authentication aktif</strong><br>
+      Verileriniz güvenli bulut veritabanında saklanır.<br>
+      Admin hesabı için e-postanıza "admin" kelimesi ekleyin.<br>
+      <span style="opacity:.6">Örnek: admin@sirket.com → Admin rolü otomatik atanır</span>
+    </div>
   </div>
 </div>
 
@@ -588,6 +942,7 @@ a{text-decoration:none;color:inherit}
       <span class="ver-pill" id="vb-ver">v10.0.0</span>
       <span id="vb-ts"></span>
       <span id="live-clock"></span>
+      <span id="save-indicator" style="opacity:0;transition:opacity .5s;font-size:9px;font-weight:700;font-family:var(--mono)"></span>
     </div>
     <div class="meta-right">
       <div class="user-pill">
@@ -994,32 +1349,11 @@ var USERS=[
 ];
 var currentUser=null;
 
-function doLogin(){
-  var u=document.getElementById('l-user').value.trim();
-  var p=document.getElementById('l-pass').value;
-  var found=USERS.find(function(x){return x.user===u&&x.pass===p;});
-  if(found){
-    currentUser=found;
-    document.getElementById('login-screen').style.display='none';
-    document.getElementById('app-shell').style.display='flex';
-    document.getElementById('app-shell').style.flexDirection='column';
-    document.getElementById('u-name').textContent=found.user+' ('+found.role+')';
-    var av=document.getElementById('u-av'); av.textContent=found.user[0].toUpperCase(); av.style.background=found.color;
-    updateVerBar(); initApp();
-  } else {
-    document.getElementById('l-err').textContent=T[LANG].le;
-    setTimeout(function(){document.getElementById('l-err').textContent='';},3000);
-  }
-}
+// doLogin handled by Firebase module
 document.getElementById('l-pass').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
 document.getElementById('l-user').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('l-pass').focus();});
 
-function doLogout(){
-  currentUser=null;
-  document.getElementById('app-shell').style.display='none';
-  document.getElementById('login-screen').style.display='flex';
-  document.getElementById('l-user').value=''; document.getElementById('l-pass').value='';
-}
+// doLogout handled by Firebase module
 
 function updateVerBar(){
   var vv=document.getElementById('vb-ver'); if(vv) vv.textContent=VERSION;
@@ -1410,12 +1744,12 @@ function renderPortfolio(){
   sv('pf-net',fmtTL(g+c+o));
   sv('pf-upd',new Date().toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'}));
 }
-function addPfGold(){var n=document.getElementById('pf-g-n').value.trim(),q=parseFloat(document.getElementById('pf-g-q').value);if(!n||!q||q<=0)return;D.pf.gold.push({n:n,q:q});document.getElementById('pf-g-n').value='';document.getElementById('pf-g-q').value='';renderPortfolio();}
-function delPfGold(i){D.pf.gold.splice(i,1);renderPortfolio();}
-function addPfCrypto(){var c=document.getElementById('pf-c-c').value,q=parseFloat(document.getElementById('pf-c-q').value);if(!q||q<=0)return;D.pf.crypto.push({c:c,q:q});document.getElementById('pf-c-q').value='';renderPortfolio();}
-function delPfCrypto(i){D.pf.crypto.splice(i,1);renderPortfolio();}
-function addPfOther(){var n=document.getElementById('pf-o-n').value.trim(),v=parseFloat(document.getElementById('pf-o-v').value);if(!n||!v||v<=0)return;D.pf.other.push({n:n,v:v});document.getElementById('pf-o-n').value='';document.getElementById('pf-o-v').value='';renderPortfolio();}
-function delPfOther(i){D.pf.other.splice(i,1);renderPortfolio();}
+function addPfGold(){var n=document.getElementById('pf-g-n').value.trim(),q=parseFloat(document.getElementById('pf-g-q').value);if(!n||!q||q<=0)return;D.pf.gold.push({n:n,q:q});document.getElementById('pf-g-n').value='';document.getElementById('pf-g-q').value='';renderPortfolio();if(window.fbSavePf)fbSavePf();}
+function delPfGold(i){D.pf.gold.splice(i,1);renderPortfolio();if(window.fbSavePf)fbSavePf();}
+function addPfCrypto(){var c=document.getElementById('pf-c-c').value,q=parseFloat(document.getElementById('pf-c-q').value);if(!q||q<=0)return;D.pf.crypto.push({c:c,q:q});document.getElementById('pf-c-q').value='';renderPortfolio();if(window.fbSavePf)fbSavePf();}
+function delPfCrypto(i){D.pf.crypto.splice(i,1);renderPortfolio();if(window.fbSavePf)fbSavePf();}
+function addPfOther(){var n=document.getElementById('pf-o-n').value.trim(),v=parseFloat(document.getElementById('pf-o-v').value);if(!n||!v||v<=0)return;D.pf.other.push({n:n,v:v});document.getElementById('pf-o-n').value='';document.getElementById('pf-o-v').value='';renderPortfolio();if(window.fbSavePf)fbSavePf();}
+function delPfOther(i){D.pf.other.splice(i,1);renderPortfolio();if(window.fbSavePf)fbSavePf();}
 
 /* ════════ LINKS & PINS ════════ */
 function renderLinks(){
@@ -1436,7 +1770,7 @@ function renderPins(){
   var el=document.getElementById('pin-btns');if(!el)return;
   el.innerHTML=pinned.map(function(l){return '<a class="pin-link" href="'+l.u+'" target="_blank" rel="noopener">'+l.e+' '+l.n+'</a>';}).join('')||'<span style="font-size:10px;color:var(--tx3)">Henüz sabitlenmiş link yok.</span>';
 }
-function togglePin(cat,idx){D.links[cat][idx].pin=!D.links[cat][idx].pin;renderLinks();}
+function togglePin(cat,idx){D.links[cat][idx].pin=!D.links[cat][idx].pin;renderLinks();if(window.fbSaveLinks)fbSaveLinks();}
 function addLink(){
   var n=document.getElementById('lnk-n').value.trim(),u=document.getElementById('lnk-u').value.trim();
   if(!n||!u)return;
@@ -1445,6 +1779,7 @@ function addLink(){
   ['lnk-n','lnk-u','lnk-d','lnk-e'].forEach(function(id){document.getElementById(id).value='';});
   document.getElementById('lnk-pin').checked=false;
   renderLinks();
+  if(window.fbSaveLinks)fbSaveLinks();
 }
 
 /* ════════ CALENDAR ════════ */
@@ -1483,7 +1818,7 @@ function addEvent(){
   if(!t||!d)return;
   D.events.push({t:t,d:d,h:document.getElementById('ev-h').value||'09:00',n:document.getElementById('ev-n').value,clr:document.getElementById('ev-c').value});
   document.getElementById('ev-t').value='';document.getElementById('ev-d').value='';document.getElementById('ev-n').value='';
-  renderCal();
+  renderCal();if(window.fbSaveEvents)fbSaveEvents();
 }
 
 /* ════════ TODO ════════ */
@@ -1494,9 +1829,9 @@ function renderTodos(){
     return '<div class="li" style="'+(td.done?'opacity:.5':'')+'"><span style="font-size:13px">'+pIc[td.p||'mid']+'</span><div class="li-c"><div class="li-n" style="text-decoration:'+(td.done?'line-through':'none')+'">'+td.n+'</div></div><button onclick="toggleTodo('+i+')" style="font-size:11px;padding:3px 8px;border-radius:5px;background:var(--bg3);border:1px solid var(--bg4);color:var(--tx2)">'+(td.done?'Geri Al':'✓')+'</button><button class="del" onclick="delTodo('+i+')">Sil</button></div>';
   }).join(''):'<div style="font-size:11px;color:var(--tx3);padding:4px">Görev yok.</div>';
 }
-function addTodo(){var n=document.getElementById('todo-n').value.trim();if(!n)return;D.todos.push({n:n,p:document.getElementById('todo-p').value,done:false});document.getElementById('todo-n').value='';renderTodos();}
-function delTodo(i){D.todos.splice(i,1);renderTodos();}
-function toggleTodo(i){D.todos[i].done=!D.todos[i].done;renderTodos();}
+function addTodo(){var n=document.getElementById('todo-n').value.trim();if(!n)return;D.todos.push({n:n,p:document.getElementById('todo-p').value,done:false});document.getElementById('todo-n').value='';renderTodos();if(window.fbSaveTodos)fbSaveTodos();}
+function delTodo(i){D.todos.splice(i,1);renderTodos();if(window.fbSaveTodos)fbSaveTodos();}
+function toggleTodo(i){D.todos[i].done=!D.todos[i].done;renderTodos();if(window.fbSaveTodos)fbSaveTodos();}
 
 /* ════════ NOTES ════════ */
 var catEmoji={is:'💼',gunluk:'📖',fikir:'💡',toplanti:'🎭'};
@@ -1508,11 +1843,11 @@ function renderNotes(){
 function openNote(i){
   var n=D.notes[i];
   sv('nm-title',n.t);sv('nm-meta',catEmoji[n.cat]+' '+n.cat+' · '+n.date);sv('nm-body',n.body);
-  document.getElementById('nm-del').onclick=function(){D.notes.splice(i,1);renderNotes();document.getElementById('note-modal').classList.remove('open');};
+  document.getElementById('nm-del').onclick=function(){D.notes.splice(i,1);renderNotes();if(window.fbSaveNotes)fbSaveNotes();document.getElementById('note-modal').classList.remove('open');};
   document.getElementById('note-modal').classList.add('open');
 }
 function closeNoteModal(e){if(!e||e.target===document.getElementById('note-modal'))document.getElementById('note-modal').classList.remove('open');}
-function addNote(){
+function addNote_orig(){
   var t=document.getElementById('note-t').value.trim(),body=document.getElementById('note-c').value.trim();
   if(!t||!body)return;
   D.notes.unshift({t:t,cat:document.getElementById('note-cat').value,body:body,date:new Date().toISOString().split('T')[0]});
@@ -1536,7 +1871,7 @@ function renderSuggestions(){
   var pIc={high:'🔴',mid:'🟡',low:'🟢'};
   el.innerHTML=D.suggestions.length?D.suggestions.map(function(s){return '<div style="padding:8px 10px;background:var(--bg3);border:1px solid var(--bg4);border-radius:8px;margin-bottom:5px;font-size:11px;color:var(--tx2);line-height:1.5"><strong style="color:var(--tx);display:block;margin-bottom:2px">'+pIc[s.p||'mid']+' '+s.t+'</strong>'+s.d+'<div style="font-size:9px;color:var(--tx3);margin-top:3px;font-family:var(--mono)">'+s.date+' · '+s.user+'</div></div>';}).join(''):'<div style="font-size:11px;color:var(--tx3);padding:4px">Henüz öneri yok. İlk öneriyi siz ekleyin!</div>';
 }
-function addSuggestion(){
+function addSuggestion_orig(){
   var t=document.getElementById('sugg-t').value.trim();if(!t)return;
   D.suggestions.unshift({t:t,d:document.getElementById('sugg-d').value,p:document.getElementById('sugg-p').value,date:new Date().toLocaleDateString('tr-TR'),user:currentUser?currentUser.user:'anonim'});
   document.getElementById('sugg-t').value='';document.getElementById('sugg-d').value='';
@@ -1545,8 +1880,8 @@ function addSuggestion(){
 
 /* ════════ EDITORS ════════ */
 function rRE(){var el=document.getElementById('re-list');if(!el)return;el.innerHTML=D.re.length?D.re.map(function(r,i){return '<div class="li"><div class="li-c"><div class="li-n">'+r.n+'</div><div class="li-s">'+r.t+' · '+Number(r.v).toLocaleString()+' TL · '+Number(r.r).toLocaleString()+' TL/ay</div></div><button class="del" onclick="dRE('+i+')">Sil</button></div>';}).join(''):'<div style="font-size:11px;color:var(--tx3);padding:4px">Mülk yok.</div>';}
-function addRE(){var n=document.getElementById('re-n').value.trim();if(!n)return;D.re.push({n:n,v:document.getElementById('re-v').value||'0',r:document.getElementById('re-r').value||'0',t:document.getElementById('re-t').value});document.getElementById('re-n').value='';document.getElementById('re-v').value='';document.getElementById('re-r').value='';rRE();}
-function dRE(i){D.re.splice(i,1);rRE();}
+function addRE(){var n=document.getElementById('re-n').value.trim();if(!n)return;D.re.push({n:n,v:document.getElementById('re-v').value||'0',r:document.getElementById('re-r').value||'0',t:document.getElementById('re-t').value});document.getElementById('re-n').value='';document.getElementById('re-v').value='';document.getElementById('re-r').value='';rRE();if(window.fbSaveRE)fbSaveRE();}
+function dRE(i){D.re.splice(i,1);rRE();if(window.fbSaveRE)fbSaveRE();}
 function rPipe(){
   var el=document.getElementById('pl');if(!el)return;
   var sc={Keşfet:'nt',Sunum:'te',Müzakere:'tu',Teklif:'up',Kapandı:'up'};
@@ -1554,17 +1889,17 @@ function rPipe(){
   var tot=D.pipe.reduce(function(a,p){var n=parseFloat(p.v.replace(/[$MBKmkb,]/gi,''));if(/[Bb]/.test(p.v))n*=1e9;else if(/[Mm]/.test(p.v))n*=1e6;else if(/[Kk]/.test(p.v))n*=1e3;return a+(n||0);},0);
   sv('bd-pt','$'+(tot/1e6).toFixed(1)+'M');sv('bd-pc',D.pipe.length);
 }
-function addPipe(){var n=document.getElementById('pn').value.trim();if(!n)return;D.pipe.push({n:n,v:document.getElementById('pv').value||'?',s:document.getElementById('ps2').value});document.getElementById('pn').value='';document.getElementById('pv').value='';rPipe();}
-function dPipe(i){D.pipe.splice(i,1);rPipe();}
+function addPipe(){var n=document.getElementById('pn').value.trim();if(!n)return;D.pipe.push({n:n,v:document.getElementById('pv').value||'?',s:document.getElementById('ps2').value});document.getElementById('pn').value='';document.getElementById('pv').value='';rPipe();if(window.fbSavePipe)fbSavePipe();}
+function dPipe(i){D.pipe.splice(i,1);rPipe();if(window.fbSavePipe)fbSavePipe();}
 function rBooks(){var el=document.getElementById('bl');if(!el)return;el.innerHTML=D.books.length?D.books.map(function(b,i){var p=Math.min(100,Math.max(0,b.p||0));var clr=p>=100?'var(--gr)':p>50?'var(--ac)':'var(--gd)';return '<div class="bk"><div class="bk-spine" style="background:var(--bg4)">📚</div><div class="bk-info" style="flex:1"><h4>'+b.t+'</h4><p>'+b.a+'</p><div style="margin-top:4px"><div class="prb"><div class="prf" style="width:'+p+'%;background:'+clr+'"></div></div><div style="font-size:9px;color:var(--tx3);margin-top:2px;font-family:var(--mono)">'+(p>=100?'✓ Tamamlandı':p+'%')+'</div></div></div><button class="del" onclick="dBook('+i+')">Sil</button></div>';}).join(''):'<div style="font-size:11px;color:var(--tx3);padding:4px">Liste boş.</div>';}
-function addBook(){var t=document.getElementById('bt').value.trim();if(!t)return;D.books.push({t:t,a:document.getElementById('ba').value||'Yazar',p:parseInt(document.getElementById('bp').value)||0});document.getElementById('bt').value='';document.getElementById('ba').value='';document.getElementById('bp').value='';rBooks();}
-function dBook(i){D.books.splice(i,1);rBooks();}
+function addBook(){var t=document.getElementById('bt').value.trim();if(!t)return;D.books.push({t:t,a:document.getElementById('ba').value||'Yazar',p:parseInt(document.getElementById('bp').value)||0});document.getElementById('bt').value='';document.getElementById('ba').value='';document.getElementById('bp').value='';rBooks();if(window.fbSaveBooks)fbSaveBooks();}
+function dBook(i){D.books.splice(i,1);rBooks();if(window.fbSaveBooks)fbSaveBooks();}
 function rGoals(){var el=document.getElementById('gl');if(!el)return;el.innerHTML=D.goals.length?D.goals.map(function(g,i){var p=g.tot>0?Math.round(g.c/g.tot*100):0;var clr=p>=100?'var(--gr)':p>60?'var(--ac)':'var(--gd)';return '<div class="li" style="flex-direction:column;align-items:flex-start;gap:5px"><div style="display:flex;align-items:center;width:100%"><div class="li-c"><div class="li-n">'+g.n+'</div><div class="li-s">'+g.c+' / '+g.tot+' · %'+p+'</div></div><button class="del" onclick="dGoal('+i+')">Sil</button></div><div style="width:100%"><div class="prb"><div class="prf" style="width:'+p+'%;background:'+clr+'"></div></div></div></div>';}).join(''):'<div style="font-size:11px;color:var(--tx3);padding:4px">Hedef yok.</div>';}
-function addGoal(){var n=document.getElementById('gn').value.trim();if(!n)return;D.goals.push({n:n,c:parseInt(document.getElementById('gc').value)||0,tot:parseInt(document.getElementById('gt').value)||10});document.getElementById('gn').value='';document.getElementById('gc').value='';document.getElementById('gt').value='';rGoals();}
-function dGoal(i){D.goals.splice(i,1);rGoals();}
+function addGoal(){var n=document.getElementById('gn').value.trim();if(!n)return;D.goals.push({n:n,c:parseInt(document.getElementById('gc').value)||0,tot:parseInt(document.getElementById('gt').value)||10});document.getElementById('gn').value='';document.getElementById('gc').value='';document.getElementById('gt').value='';rGoals();if(window.fbSaveGoals)fbSaveGoals();}
+function dGoal(i){D.goals.splice(i,1);rGoals();if(window.fbSaveGoals)fbSaveGoals();}
 function rKids(){var el=document.getElementById('kl');if(!el)return;el.innerHTML=D.kids.length?D.kids.map(function(k,i){return '<div class="li"><div style="font-size:16px;width:24px;text-align:center">'+k.e+'</div><div class="li-c"><div class="li-n">'+k.a+'</div><div class="li-s">'+k.d+'</div></div><button class="del" onclick="dKid('+i+')">Sil</button></div>';}).join(''):'<div style="font-size:11px;color:var(--tx3);padding:4px">Aktivite yok.</div>';sv('kc',D.kids.length);}
-function addKid(){var a=document.getElementById('ka').value.trim();if(!a)return;D.kids.push({a:a,d:document.getElementById('kd').value||'Belirtilmedi',e:document.getElementById('ke').value||'⭐'});document.getElementById('ka').value='';document.getElementById('kd').value='';document.getElementById('ke').value='';rKids();}
-function dKid(i){D.kids.splice(i,1);rKids();}
+function addKid(){var a=document.getElementById('ka').value.trim();if(!a)return;D.kids.push({a:a,d:document.getElementById('kd').value||'Belirtilmedi',e:document.getElementById('ke').value||'⭐'});document.getElementById('ka').value='';document.getElementById('kd').value='';document.getElementById('ke').value='';rKids();if(window.fbSaveKids)fbSaveKids();}
+function dKid(i){D.kids.splice(i,1);rKids();if(window.fbSaveKids)fbSaveKids();}
 
 /* ════════ RISK GAUGE ════════ */
 function drawRiskGauge(){
@@ -1692,8 +2027,12 @@ function updateHijriDate(){
   if(gEl)gEl.textContent=today.toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric'});
 }
 
+/* ════════ UTILS ════════ */
+function togglePw(id){var el=document.getElementById(id);el.type=el.type==='password'?'text':'password';}
+
 /* ════════ INIT ════════ */
 function initApp(){
+  // Called by Firebase onAuthStateChanged after data is loaded
   rRE();rPipe();rBooks();rGoals();rKids();
   renderLinks();renderPortfolio();renderNotes();renderTodos();
   renderAlerts();renderWorldPrices();renderCal();renderUpcomingEvs();
@@ -1707,33 +2046,6 @@ function initApp(){
   setInterval(function(){var h=new Date().getHours();if(h===8||h===12)loadEconomists(true);},60000);
   setInterval(renderInvestorQuote,3600000);
 }
-</script>
-
-<script type="module">
-  // Tam URL kullanarak kütüphaneleri çağırıyoruz (Tarayıcı uyumlu yöntem)
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js";
-  import { getFirestore } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-
-  // Senin özel Firebase bilgilerin
-  const firebaseConfig = {
-    apiKey: "AIzaSyDOfwK0SQZ4EOLRKPRg5QkJW4DLMSXawUw",
-    authDomain: "stratejikkarardestek.firebaseapp.com",
-    projectId: "stratejikkarardestek",
-    storageBucket: "stratejikkarardestek.firebasestorage.app",
-    messagingSenderId: "329117849620",
-    appId: "1:329117849620:web:f3a39d628838d20e002f01",
-    measurementId: "G-RVQVTCS1LL"
-  };
-
-  // Firebase'i başlat
-  const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
-  const db = getFirestore(app);
-
-  // Global erişim için (Diğer fonksiyonların db'yi kullanabilmesi için)
-  window.db = db;
-  console.log("Firebase & Firestore başarıyla bağlandı!");
 </script>
 </body>
 </html>
