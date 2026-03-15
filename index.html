@@ -1708,5 +1708,32 @@ function initApp(){
   setInterval(renderInvestorQuote,3600000);
 }
 </script>
+
+<script type="module">
+  // Tam URL kullanarak kütüphaneleri çağırıyoruz (Tarayıcı uyumlu yöntem)
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js";
+  import { getFirestore } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+  // Senin özel Firebase bilgilerin
+  const firebaseConfig = {
+    apiKey: "AIzaSyDOfwK0SQZ4EOLRKPRg5QkJW4DLMSXawUw",
+    authDomain: "stratejikkarardestek.firebaseapp.com",
+    projectId: "stratejikkarardestek",
+    storageBucket: "stratejikkarardestek.firebasestorage.app",
+    messagingSenderId: "329117849620",
+    appId: "1:329117849620:web:f3a39d628838d20e002f01",
+    measurementId: "G-RVQVTCS1LL"
+  };
+
+  // Firebase'i başlat
+  const app = initializeApp(firebaseConfig);
+  const analytics = getAnalytics(app);
+  const db = getFirestore(app);
+
+  // Global erişim için (Diğer fonksiyonların db'yi kullanabilmesi için)
+  window.db = db;
+  console.log("Firebase & Firestore başarıyla bağlandı!");
+</script>
 </body>
 </html>
