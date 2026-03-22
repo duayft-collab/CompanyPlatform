@@ -1,78 +1,43 @@
 <!DOCTYPE html>
+
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TradeOS — Dashboard</title>
+<title>TradeOS</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,sans-serif;background:#f5f5f3}
-.topbar{background:#fff;border-bottom:1px solid #e0e0e0;padding:12px 24px;display:flex;align-items:center;justify-content:space-between}
-.logo{font-size:15px;font-weight:600}
-.user{font-size:13px;color:#666;display:flex;align-items:center;gap:12px}
-.btn-logout{padding:6px 12px;border-radius:8px;border:1px solid #ddd;background:transparent;font-size:12px;cursor:pointer;font-family:inherit}
-.content{padding:32px;max-width:1200px;margin:0 auto}
-h2{font-size:20px;font-weight:600;margin-bottom:24px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
-.card{background:#fff;border-radius:12px;border:1px solid #e0e0e0;padding:20px;cursor:pointer;transition:border-color .15s}
-.card:hover{border-color:#999}
-.card-icon{font-size:28px;margin-bottom:10px}
-.card-title{font-size:14px;font-weight:500;margin-bottom:4px}
-.card-sub{font-size:12px;color:#999}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f3;color:#1a1a1a}
+.shell{display:flex;height:100vh;overflow:hidden}
+.sidebar{width:220px;background:#fff;border-right:1px solid #e0e0e0;display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto}
+.sidebar-logo{padding:20px 16px 14px;border-bottom:1px solid #e0e0e0}
+.logo-title{font-size:15px;font-weight:600}
+.logo-sub{font-size:11px;color:#999;margin-top:2px}
+.sidebar-nav{padding:10px 8px;flex:1}
+.nav-section{font-size:10px;color:#bbb;padding:10px 10px 4px;letter-spacing:.05em;text-transform:uppercase}
+.nav-item{padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;color:#666;margin-bottom:1px;transition:background .1s}
+.nav-item:hover{background:#f5f5f3}
+.nav-item.active{background:#f0f0f0;color:#1a1a1a;font-weight:500}
+.sidebar-footer{padding:12px 14px;border-top:1px solid #e0e0e0;display:flex;align-items:center;gap:8px}
+.user-avatar{width:28px;height:28px;border-radius:50%;background:#e3f0ff;color:#1a5fb4;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0}
+.user-email{font-size:11px;color:#666;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.logout-btn{background:none;border:none;cursor:pointer;color:#999;font-size:14px;padding:4px}
+.main-area{flex:1;overflow-y:auto}
+#page-content{min-height:100%}
 </style>
 </head>
 <body>
-
-<div class="topbar">
-  <div class="logo">TradeOS</div>
-  <div class="user">
-    <span id="userName">—</span>
-    <button class="btn-logout" onclick="cikis()">Çıkış</button>
-  </div>
-</div>
-
-<div class="content">
-  <h2>Hoş geldiniz 👋</h2>
-  <div class="grid">
-    <div class="card"><div class="card-icon">◎</div><div class="card-title">CRM</div><div class="card-sub">Müşteri & Tedarikçi</div></div>
-    <div class="card"><div class="card-icon">📦</div><div class="card-title">Siparişler</div><div class="card-sub">Sipariş & Sevkiyat</div></div>
-    <div class="card"><div class="card-icon">📄</div><div class="card-title">Dokümanlar</div><div class="card-sub">Belge yönetimi</div></div>
-    <div class="card"><div class="card-icon">💰</div><div class="card-title">Finans</div><div class="card-sub">Alacak & Metaller</div></div>
-    <div class="card"><div class="card-icon">🚢</div><div class="card-title">Navlun</div><div class="card-sub">Kargo & Lojistik</div></div>
-    <div class="card"><div class="card-icon">🧵</div><div class="card-title">Numune Arşivi</div><div class="card-sub">Ürün numuneleri</div></div>
-    <div class="card"><div class="card-icon">📢</div><div class="card-title">Duyurular</div><div class="card-sub">Şirket duyuruları</div></div>
-    <div class="card"><div class="card-icon">📅</div><div class="card-title">Takvim</div><div class="card-sub">Etkinlik & Görevler</div></div>
-    <div class="card"><div class="card-icon">👥</div><div class="card-title">İK Hub</div><div class="card-sub">Personel yönetimi</div></div>
-    <div class="card"><div class="card-icon">💡</div><div class="card-title">Vizyon</div><div class="card-sub">İlham kütüphanesi</div></div>
-  </div>
-</div>
+<div id="app"></div>
 
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
-<script>
-const firebaseConfig = {
-  apiKey: "AIzaSyB5eValPPkRuPtJIgDnB7jRWOt2zythuRI",
-  authDomain: "companyplatform-9e1a8.firebaseapp.com",
-  projectId: "companyplatform-9e1a8",
-  storageBucket: "companyplatform-9e1a8.firebasestorage.app",
-  messagingSenderId: "526343866340",
-  appId: "1:526343866340:web:31f9c04b85e284eac7e9f1"
-};
 
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
 
-auth.onAuthStateChanged(user => {
-  if (!user) {
-    window.location.href = "../index.html";
-  } else {
-    document.getElementById("userName").textContent = user.email;
-  }
-});
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
 
-function cikis() {
-  auth.signOut().then(() => window.location.href = "../index.html");
-}
-</script>
+<script src="js/app.js"></script>
+
 </body>
 </html>
