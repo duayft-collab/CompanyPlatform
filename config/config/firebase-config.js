@@ -1,49 +1,21 @@
-/**
- * firebase-config.js
- * Duay Global Trade Company — Gayrimenkul Yönetim Sistemi
- * v1.0 / 2026-03-23
- *
- * GÜVENLIK: Bu dosyaya gerçek anahtar YAZMA.
- * Gerçek değerleri .env dosyasından veya
- * Firebase Hosting ortam değişkenlerinden oku.
- *
- * .env.example dosyasındaki anahtarları doldur,
- * ardından bu placeholder'ları değiştir.
- */
-
 import { initializeApp }       from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth }             from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-import {
-  getFirestore,
-  enableIndexedDbPersistence
-} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
-import { getAnalytics }        from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics.js';
+import { getFirestore, enableIndexedDbPersistence } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
-// ─── PLACEHOLDER — .env'den doldur ────────────────────────
 const firebaseConfig = {
-  apiKey:            'YOUR_FIREBASE_API_KEY',
-  authDomain:        'YOUR_PROJECT_ID.firebaseapp.com',
-  projectId:         'YOUR_PROJECT_ID',
-  storageBucket:     'YOUR_PROJECT_ID.appspot.com',
-  messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
-  appId:             'YOUR_APP_ID',
-  measurementId:     'YOUR_MEASUREMENT_ID',
+  apiKey:            'AIzaSyB5eValPPkRuPtJIgDnB7jRWOt2zythuRI',
+  authDomain:        'companyplatform-9e1a8.firebaseapp.com',
+  projectId:         'companyplatform-9e1a8',
+  storageBucket:     'companyplatform-9e1a8.firebasestorage.app',
+  messagingSenderId: '526343866340',
+  appId:             '1:526343866340:web:31f9c04b85e284eac7e9f1',
+  measurementId:     'G-CX794RLEF4',
 };
-// ──────────────────────────────────────────────────────────
 
-const app       = initializeApp(firebaseConfig);
-const auth      = getAuth(app);
-const db        = getFirestore(app);
-const analytics = getAnalytics(app);
+const app  = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db   = getFirestore(app);
 
-// Offline-First: IndexedDB cache aktif
-enableIndexedDbPersistence(db).catch((err) => {
-  if (err.code === 'failed-precondition') {
-    // Birden fazla sekme açık — sadece bir sekmede aktif olur
-    console.warn('[Firebase] Persistence: birden fazla sekme açık.');
-  } else if (err.code === 'unimplemented') {
-    console.warn('[Firebase] Persistence: bu tarayıcıda desteklenmiyor.');
-  }
-});
+enableIndexedDbPersistence(db).catch(() => {});
 
-export { app, auth, db, analytics };
+export { app, auth, db };
