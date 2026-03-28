@@ -280,7 +280,7 @@ function _bindGlobal() {
   };
 
   window._adminBackupNow = () => {
-    showToast('info', 'Manuel yedekleme Cloud Function tetikleyicisiyle yapılır. Firebase Console'dan kontrol edin.');
+    showToast('info', 'Manuel yedekleme Cloud Function tetikleyicisiyle yapılır. Firebase Console dan kontrol edin.');
   };
 }
 
