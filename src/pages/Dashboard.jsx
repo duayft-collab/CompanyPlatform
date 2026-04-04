@@ -1,6 +1,8 @@
+import { useEffect, useRef } from 'react';
 import { useStore } from '../store/app';
 import { Topbar, TickerBar } from '../components/Layout';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { seedTestData } from '../core/seedData';
 
 const FMT = (n) => new Intl.NumberFormat('tr-TR').format(Math.round(n));
 
@@ -20,13 +22,21 @@ const PIE_DATA = [
 ];
 
 export default function Dashboard() {
-  const { properties, rentals, alerts } = useStore();
+  const { mulkler, kiralar, alarmlar } = useStore();
+  const seeded = useRef(false);
 
-  const totalVal   = properties.reduce((s,p)=>s+(p.currentPrice||0),0) || 16700000;
-  const totalBuy   = properties.reduce((s,p)=>s+(p.buyPrice||0),0)     || 11600000;
-  const monthlyRent= rentals.reduce((s,r)=>s+(r.monthlyRent||0),0)     || 83000;
-  const unread     = alerts.filter(a=>!a.isRead).length || 3;
-  const roi        = totalBuy > 0 ? ((totalVal-totalBuy)/totalBuy*100) : 44.2;
+  useEffect(() => {
+    if (import.meta.env.DEV && !seeded.current && mulkler.length === 0) {
+      seeded.current = true;
+      seedTestData().catch(e => console.error('Seed hatası:', e));
+    }
+  }, [mulkler.length]);
+
+  const totalVal    = mulkler.reduce((s,p) => s + (p.currentPrice||0), 0) || 16700000;
+  const totalBuy    = mulkler.reduce((s,p) => s + (p.buyPrice||0), 0)     || 11600000;
+  const monthlyRent = kiralar.reduce((s,r) => s + (r.monthlyRent||0), 0)  || 83000;
+  const unread      = alarmlar.filter(a => !a.isRead).length || 3;
+  const roi         = totalBuy > 0 ? ((totalVal - totalBuy) / totalBuy * 100) : 44.2;
 
   return (
     <div>
@@ -50,9 +60,9 @@ export default function Dashboard() {
         {/* KPI */}
         <div className="g4" style={{marginBottom:20}}>
           {[
-            {lbl:'Toplam Portföy',val:`₺${FMT(totalVal/100)} TL`,sub:`${properties.length||4} mülk`,color:'var(--blue)',ico:'🏠'},
+            {lbl:'Toplam Portföy',val:`₺${FMT(totalVal/100)} TL`,sub:`${mulkler.length||4} mülk`,color:'var(--blue)',ico:'🏠'},
             {lbl:'Toplam Getiri',val:`%${roi.toFixed(1)}`,sub:`₺${FMT((totalVal-totalBuy)/100)} TL kar`,color:'var(--green)',ico:'📈'},
-            {lbl:'Aylık Kira',val:`₺${FMT(monthlyRent)} TL`,sub:`${rentals.filter(r=>r.status==='active').length||2} aktif kiracı`,color:'var(--gold)',ico:'🔑'},
+            {lbl:'Aylık Kira',val:`₺${FMT(monthlyRent)} TL`,sub:`${kiralar.filter(r=>r.status==='active').length||2} aktif kiracı`,color:'var(--gold)',ico:'🔑'},
             {lbl:'Alarmlar',val:unread.toString(),sub:'Acil işlem gerekiyor',color:'var(--red)',ico:'🔔'},
           ].map((k,i)=>(
             <div key={i} className="kpi" style={{'--kc':k.color}}>
